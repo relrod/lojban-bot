@@ -1,23 +1,28 @@
 #!/usr/bin/env python
 from BeautifulSoup import BeautifulStoneSoup as BSS
-import socket, select, re, sys
+import socket, select, re, ConfigParser
+from string import split
 
 print "[*] bevri lojban datni // loading lojban data"
 soup = BSS(open("realdb.xml").read())
 
+
 lojban = re.compile("!! ?(.+)")
+slist = []
+cp = ConfigParser.ConfigParser()
+cp.readfp(open("config.ini"))
+for section in cp.sections():
+   # So long as section is *not* 'general':
+   if section != "global":
+      # .. connect to it.
+      con = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+      con.connect((cp.get(section,"server"), int(cp.get(section,"port"))))
+      con.send("USER " + (cp.get(section,"nickname") + " ")*4 + "\r\n")
+      con.send("NICK " + cp.get(section, "nickname") + "\r\n")
+      for channel in split(cp.get(section, "channels"), " "):
+         con.send("JOIN " + channel + "\r\n")
+      slist.append(con)
 
-IRC_NICKNAME = "lojban"
-IRC_SERVER = "irc.eighthbit.net"
-IRC_CHANNELS = ("#codeblock",)
-
-irc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-irc.connect((IRC_SERVER, 6667))
-
-irca = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-irca.connect(("irc.freenode.net", 6667))
-
-slist = [irc, irca]
 
 def send(msg, which):
    if which == 2: # Global
@@ -32,17 +37,18 @@ def msg(user, msg, which):
    send("PRIVMSG " + user + " :" + msg, which)
    return
 
+
+
 def processline(line, which):
    parts = line.split(' :',1)
    args = parts[0].split(' ')
    if (len(parts) > 1):
       args.append(parts[1])
    
-   if args[0] == "PING":
-      send("PONG :" + args[1], which)
-      return
-
    try:
+      if args[0] == "PING":
+         send("PONG :" + args[1], which)
+         return
       if args[3] == "!workplox":
          msg(args[2], "no.")
          return
@@ -80,11 +86,6 @@ def processline(line, which):
    # When we're done, remember to return.
    return
    
-
-send("USER " + (IRC_NICKNAME + " ")*4, 2)
-send("NICK " + IRC_NICKNAME, 2)
-for channel in IRC_CHANNELS:
-   send("JOIN " + channel, 2)
 
 while True:
    # EXIST
