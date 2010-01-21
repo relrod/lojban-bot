@@ -7,7 +7,6 @@ print "[*] bevri lojban datni // loading lojban data"
 soup = BSS(open("realdb.xml").read())
 
 
-lojban = re.compile("!! ?(.+)")
 slist = []
 cp = ConfigParser.ConfigParser()
 cp.readfp(open("config.ini"))
@@ -22,6 +21,9 @@ for section in cp.sections():
       for channel in split(cp.get(section, "channels"), " "):
          con.send("JOIN " + channel + "\r\n")
       slist.append(con)
+
+comchar = cp.get("global","comchar")
+lojban = re.compile(comchar + " ?(.+)")
 
 
 def send(msg, which):
@@ -45,12 +47,18 @@ def processline(line, which):
    if (len(parts) > 1):
       args.append(parts[1])
    
+      if "PING" in line:
+         try:
+            send("PONG :" + args[1], which)
+            return
+         except:
+            # Fake it...
+            send("PONG ", which)
+            return
+         
    try:
-      if args[0] == "PING":
-         send("PONG :" + args[1], which)
-         return
       if args[3] == "!workplox":
-         msg(args[2], "no.")
+         msg(args[2], "no.", which)
          return
       elif str(re.match(lojban, args[3])) != "None":
          # We have a regex match!!!
@@ -65,8 +73,11 @@ def processline(line, which):
             # Try a valsi...
             word = soup.find('valsi', word=m[0])
             try:
+               definition = str(word.definition.contents[0])
+               definition = re.sub("\$(.)_{?(\d+)}?\$", "\\1\\2", definition)
+               definition = re.sub("\$(.)_(\d+)=(.)_(\d+)\$", "\\1\\2=\\3\\4", definition)
                response += "Definition (type: " + str(word['type']) + "): " \
-                     + str(word.definition.contents[0])
+                     + definition
             except:
                msg(args[2], "No translation or definition could be found.", which)
                return
@@ -92,6 +103,7 @@ while True:
    inputready,outputready,exceptready = select.select(slist,[],[])
    for server in inputready:
       line = server.recv(1024).rstrip()
+      print line
       if "\r\n" in line:
          linesep = line.split()
          for l in linesep:
